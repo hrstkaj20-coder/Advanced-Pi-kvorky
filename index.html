@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Piškvorky</title>
+    <style>
+        /* Celkové pozadí stránky */
+        body {
+            background-color: #00008B;
+            color: #F0F8FF;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background 1s ease;
+        }
+
+        /* Výherní pozadí */
+        body.win-x {
+            background: radial-gradient(circle, #8B0000 0%, #00008B 80%);
+        }
+        body.win-o {
+            background: radial-gradient(circle, #004d00 0%, #00008B 80%);
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            z-index: 2;
+        }
+
+        #status {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            z-index: 2;
+        }
+
+        /* Hlavní herní plocha - mřížka */
+        .game {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            background-color: #F0F8FF;
+            padding: 8px;
+            border-radius: 4px;
+            z-index: 2;
+        }
+
+        /* Menší 3x3 pole */
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3px;
+            background-color: #F0F8FF;
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s, outline 0.2s;
+            outline: 2px solid transparent;
+        }
+
+        /* 2. Zvýraznění aktivního pole - nově svítí #00FFFF */
+        .board.active {
+            outline: 3px solid #00FFFF;
+            box-shadow: 0 0 20px 5px #00FFFF;
+            transform: scale(1.03);
+            z-index: 1;
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            background-color: #00008B;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 36px;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .board.active .cell:hover {
+            background-color: #0000a0;
+        }
+
+        .cell.x { color: #FF0000; }
+        .cell.o { color: #00FF00; }
+
+        /* Překrytí malého pole po jeho výhře / remíze */
+        .board::after {
+            content: attr(data-winner);
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 139, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 120px;
+            font-weight: bold;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .board[data-winner="X"]::after { color: #FF0000; opacity: 1; }
+        .board[data-winner="O"]::after { color: #00FF00; opacity: 1; }
+        /* 4. Zobrazení šedé pomlčky při remíze v malém poli */
+        .board[data-winner="-"]::after { color: #808080; opacity: 1; }
+
+        /* --- UI PRVKY (Tlačítka a Nápověda) --- */
+        
+        /* 5. Tlačítko Restart vpravo nahoře */
+        #restart-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #F0F8FF;
+            color: #00008B;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        #restart-btn:hover { background-color: #d0e8ff; }
+
+        /* 1. Ikonka nápovědy vpravo */
+        #info-btn {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            background-color: #F0F8FF;
+            color: #00008B;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 10;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        #info-btn:hover { background-color: #d0e8ff; }
+
+        /* Modal okno nápovědy */
+        #info-modal {
+            display: none; /* Skryté ve výchozím stavu */
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #F0F8FF;
+            color: #00008B;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            position: relative;
+        }
+        .close-btn {
+            position: absolute;
+            top: 10px; right: 15px;
+            font-size: 24px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* 3. Možnosti po skončení hry */
+        #endgame-menu {
+            display: none;
+            margin-top: 25px;
+            gap: 15px;
+            z-index: 2;
+        }
+        #endgame-menu button {
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #F0F8FF;
+            color: #00008B;
+            font-weight: bold;
+        }
+        #endgame-menu button:hover { background-color: #d0e8ff; }
+
+        /* --- ANIMACE --- */
+
+        /* 6. Animace remízy */
+        .handshake {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 150px;
+            z-index: 50;
+            animation: popIn 1s ease-out;
+        }
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            50% { transform: translate(-50%, -50%) scale(1.3); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        /* 6. Animace konfet ze stěn */
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 20px;
+            z-index: 0;
+            border-radius: 2px;
+        }
+        @keyframes shootRight {
+            0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
+            50% { transform: translate(30vw, -30vh) scale(1.2) rotate(180deg); }
+            100% { transform: translate(50vw, 100vh) scale(0.8) rotate(360deg); opacity: 0; }
+        }
+        @keyframes shootLeft {
+            0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
+            50% { transform: translate(-30vw, -30vh) scale(1.2) rotate(-180deg); }
+            100% { transform: translate(-50vw, 100vh) scale(0.8) rotate(-360deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <button id="restart-btn" onclick="resetGame('new')">Restart</button>
+    <div id="info-btn" onclick="toggleInfo()">i</div>
+
+    <div id="info-modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="toggleInfo()">&times;</span>
+            <h2>Jak hrát Advanced Piškvorky?</h2>
+            <p><strong>Cíl:</strong> Vyhrát celou hru tím, že propojíš 3 vyhraná malá pole (jako v klasických piškvorkách).</p>
+            <ul style="padding-left: 20px; line-height: 1.6;">
+                <li>Hráč X začíná položením svého znaku do libovolného z 9 malých polí.</li>
+                <li><strong>Klíčové pravidlo:</strong> Pozice buňky, do které zahraješ, určuje, do jakého <strong>velkého pole</strong> musí hrát tvůj soupeř v dalším tahu! <em>(Např.: Zahrál jsi do pravého horního rohu v malém poli -> Soupeř musí hrát do pravého horního malého pole na hlavní ploše.)</em></li>
+                <li>Kde musí soupeř hrát, poznáš podle <strong>svítící modré barvy (#00FFFF)</strong>.</li>
+                <li>Pokud tě soupeř pošle do pole, které je již <strong>vyhrané nebo plné (remíza)</strong>, můžeš hrát <strong>kamkoliv</strong>.</li>
+            </ul>
+        </div>
+    </div>
+
+    <h1>Advanced Piškvorky</h1>
+    <div id="status">Hraje: <span style="color: #FF0000;">X</span></div>
+    
+    <div id="game" class="game"></div>
+
+    <div id="endgame-menu">
+        <button onclick="resetGame('rematch')">Odveta</button>
+        <button onclick="resetGame('new')">Nová hra</button>
+    </div>
+
+    <script>
+        // --- LOGIKA HRY ---
+        let startingPlayer = 'X'; // Pro účely "Odvety"
+        let currentPlayer = 'X';
+        let boards = Array(9).fill(null).map(() => Array(9).fill(null));
+        let macroBoard = Array(9).fill(null);
+        let activeBoardIndex = -1; 
+        let gameActive = true;
+
+        const gameDiv = document.getElementById('game');
+        const statusDiv = document.getElementById('status');
+        const endgameMenu = document.getElementById('endgame-menu');
+        const boardElements = [];
+
+        // Vykreslení hrací plochy
+        for (let i = 0; i < 9; i++) {
+            let bDiv = document.createElement('div');
+            bDiv.className = 'board active'; 
+            boardElements.push(bDiv);
+            
+            for (let j = 0; j < 9; j++) {
+                let cDiv = document.createElement('div');
+                cDiv.className = 'cell';
+                cDiv.dataset.board = i;
+                cDiv.dataset.cell = j;
+                cDiv.addEventListener('click', onCellClick);
+                bDiv.appendChild(cDiv);
+            }
+            gameDiv.appendChild(bDiv);
+        }
+
+        function checkWin(boardArray) {
+            const lines = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8],
+                [0, 3, 6], [1, 4, 7], [2, 5, 8],
+                [0, 4, 8], [2, 4, 6]
+            ];
+            for (let line of lines) {
+                // '-' nesmí spustit výhru
+                if (boardArray[line[0]] && 
+                    boardArray[line[0]] !== '-' &&
+                    boardArray[line[0]] === boardArray[line[1]] && 
+                    boardArray[line[0]] === boardArray[line[2]]) {
+                    return boardArray[line[0]];
+                }
+            }
+            return null;
+        }
+
+        function isBoardFull(boardArray) {
+            return boardArray.every(cell => cell !== null);
+        }
+
+        function onCellClick(e) {
+            if (!gameActive) return;
+            
+            let bIndex = parseInt(e.target.dataset.board);
+            let cIndex = parseInt(e.target.dataset.cell);
+
+            if (macroBoard[bIndex] !== null) return; 
+            if (activeBoardIndex !== -1 && activeBoardIndex !== bIndex) return; 
+            if (boards[bIndex][cIndex] !== null) return; 
+
+            // Zapsání tahu
+            boards[bIndex][cIndex] = currentPlayer;
+            e.target.textContent = currentPlayer;
+            e.target.classList.add(currentPlayer.toLowerCase());
+
+            // Kontrola výhry v malém poli
+            let localWinner = checkWin(boards[bIndex]);
+            if (localWinner) {
+                macroBoard[bIndex] = localWinner;
+                boardElements[bIndex].dataset.winner = localWinner;
+            } else if (isBoardFull(boards[bIndex])) {
+                // 4. Remíza na malém poli
+                macroBoard[bIndex] = '-';
+                boardElements[bIndex].dataset.winner = '-';
+            }
+
+            // Kontrola celkové výhry
+            let globalWinner = checkWin(macroBoard);
+            if (globalWinner) {
+                statusDiv.innerHTML = `Vítěz: <span style="color: ${globalWinner === 'X' ? '#FF0000' : '#00FF00'};">${globalWinner}</span>!`;
+                triggerWin(globalWinner);
+                return;
+            } else if (isBoardFull(macroBoard)) {
+                // Kontrola celkové remízy
+                statusDiv.innerHTML = `Hra skončila remízou!`;
+                triggerTie();
+                return;
+            }
+
+            // Nastavení dalšího aktivního pole
+            if (macroBoard[cIndex] !== null) {
+                activeBoardIndex = -1; // Pokud je cílové pole vyhrané nebo remízované
+            } else {
+                activeBoardIndex = cIndex;
+            }
+
+            // Změna hráče
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            updateStatusText();
+            updateActiveVisuals(activeBoardIndex);
+        }
+
+        function updateStatusText() {
+            let nextColor = currentPlayer === 'X' ? '#FF0000' : '#00FF00';
+            statusDiv.innerHTML = `Hraje: <span style="color: ${nextColor};">${currentPlayer}</span>`;
+        }
+
+        function updateActiveVisuals(activeIndex) {
+            for (let i = 0; i < 9; i++) {
+                if (activeIndex === -2) {
+                    boardElements[i].classList.remove('active');
+                } else if (activeIndex === -1) {
+                    if (macroBoard[i] === null) {
+                        boardElements[i].classList.add('active');
+                    } else {
+                        boardElements[i].classList.remove('active');
+                    }
+                } else {
+                    if (i === activeIndex) {
+                        boardElements[i].classList.add('active');
+                    } else {
+                        boardElements[i].classList.remove('active');
+                    }
+                }
+            }
+        }
+
+        // --- ANIMACE A UKONČENÍ HRY ---
+
+        function triggerWin(winner) {
+            gameActive = false;
+            updateActiveVisuals(-2);
+            endgameMenu.style.display = 'flex';
+            
+            // Změna pozadí
+            document.body.classList.add(winner === 'X' ? 'win-x' : 'win-o');
+            
+            // Generování konfet
+            const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFFFFF'];
+            for (let i = 0; i < 100; i++) {
+                let conf = document.createElement('div');
+                conf.className = 'confetti';
+                conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                conf.style.top = `${Math.random() * 50 + 20}vh`; // Náhodná výška odkud vystřelí
+                
+                // Polovina zleva, polovina zprava
+                if (Math.random() > 0.5) {
+                    conf.style.left = '-10px';
+                    conf.style.animation = `shootRight ${1.5 + Math.random()}s ease-out forwards`;
+                } else {
+                    conf.style.right = '-10px';
+                    conf.style.animation = `shootLeft ${1.5 + Math.random()}s ease-out forwards`;
+                }
+                document.body.appendChild(conf);
+            }
+        }
+
+        function triggerTie() {
+            gameActive = false;
+            updateActiveVisuals(-2);
+            endgameMenu.style.display = 'flex';
+
+            // Přidání animace podání ruky
+            const handshake = document.createElement('div');
+            handshake.innerHTML = '🤝';
+            handshake.className = 'handshake';
+            handshake.id = 'tie-animation';
+            document.body.appendChild(handshake);
+        }
+
+        // --- RESET A NÁPOVĚDA ---
+
+        // 3. Odveta a Nová hra
+        function resetGame(type) {
+            // Resetování proměnných
+            boards = Array(9).fill(null).map(() => Array(9).fill(null));
+            macroBoard = Array(9).fill(null);
+            activeBoardIndex = -1;
+            gameActive = true;
+
+            // Odstranění konfet a animací
+            document.querySelectorAll('.confetti, .handshake').forEach(el => el.remove());
+            document.body.classList.remove('win-x', 'win-o');
+            endgameMenu.style.display = 'none';
+
+            // Kdo začíná?
+            if (type === 'rematch') {
+                startingPlayer = startingPlayer === 'X' ? 'O' : 'X';
+                currentPlayer = startingPlayer;
+            } else if (type === 'new') {
+                startingPlayer = 'X';
+                currentPlayer = 'X';
+            }
+            updateStatusText();
+
+            // Resetování UI
+            for (let i = 0; i < 9; i++) {
+                boardElements[i].removeAttribute('data-winner');
+                let cells = boardElements[i].querySelectorAll('.cell');
+                cells.forEach(cell => {
+                    cell.textContent = '';
+                    cell.classList.remove('x', 'o');
+                });
+            }
+            updateActiveVisuals(-1);
+        }
+
+        // Zobrazení/Skrytí nápovědy
+        function toggleInfo() {
+            const modal = document.getElementById('info-modal');
+            modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+        }
+    </script>
+</body>
+</html>
